@@ -63,6 +63,11 @@ class CameraViewModel(application: Application) : AndroidViewModel(application),
     private val _qrCodeBitmap = MutableStateFlow<Bitmap?>(null)
     val qrCodeBitmap: StateFlow<Bitmap?> = _qrCodeBitmap.asStateFlow()
 
+    private val _trustedViewersCount = MutableStateFlow(
+        prefs.getStringSet("trusted_viewers", emptySet())?.size ?: 0
+    )
+    val trustedViewersCount: StateFlow<Int> = _trustedViewersCount.asStateFlow()
+
     private var signalingClient: SocketSignalingClient? = null
     private var webRtcManager: WebRtcManager? = null
     private val rootEglBase = EglBase.create()
@@ -119,7 +124,15 @@ class CameraViewModel(application: Application) : AndroidViewModel(application),
         }
     }
 
-    fun approveStream(request: SessionRequestEvent) {
+    fun approveStream(request: SessionRequestEvent, rememberForever: Boolean = false) {
+        if (rememberForever) {
+            val existing = prefs.getStringSet("trusted_viewers", emptySet())?.toMutableSet() ?: mutableSetOf()
+            existing.add(request.viewerDeviceId)
+            existing.add(request.viewerName)
+            prefs.edit().putStringSet("trusted_viewers", existing).apply()
+            _trustedViewersCount.value = existing.size
+        }
+
         _pendingConsentRequest.value = null
         _streamState.value = StreamState.STREAMING
         _connectedViewer.value = ConnectedViewerInfo(
@@ -131,6 +144,12 @@ class CameraViewModel(application: Application) : AndroidViewModel(application),
         webRtcManager?.startLocalMediaCapture(isFrontFacing = false)
         webRtcManager?.createPeerConnection(iceServers)
         CameraStreamingService.start(context, request.viewerName)
+    }
+
+    fun revokeAllTrustedViewers() {
+        prefs.edit().remove("trusted_viewers").apply()
+        _trustedViewersCount.value = 0
+        stopStreaming()
     }
 
     fun rejectStream(request: SessionRequestEvent) {
@@ -161,8 +180,14 @@ class CameraViewModel(application: Application) : AndroidViewModel(application),
         if (iceServers.isNotEmpty()) this.iceServers = iceServers
     }
     override fun onStreamRequested(request: SessionRequestEvent) {
-        _pendingConsentRequest.value = request
-        _streamState.value = StreamState.AWAITING_CONSENT
+        val trusted = prefs.getStringSet("trusted_viewers", emptySet()) ?: emptySet()
+        if (trusted.contains(request.viewerDeviceId) || trusted.contains(request.viewerName)) {
+            Log.d(TAG, "Auto-approving trusted viewer: ${request.viewerName}")
+            approveStream(request, rememberForever = false)
+        } else {
+            _pendingConsentRequest.value = request
+            _streamState.value = StreamState.AWAITING_CONSENT
+        }
     }
     override fun onOfferReceived(sdp: SessionDescription, sessionId: String, senderDeviceId: String) {
         webRtcManager?.handleRemoteOffer(sdp) { answer ->

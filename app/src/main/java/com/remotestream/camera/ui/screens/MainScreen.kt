@@ -38,6 +38,7 @@ fun MainScreen(viewModel: CameraViewModel) {
     val pendingConsent by viewModel.pendingConsentRequest.collectAsState()
     val qrBitmap by viewModel.qrCodeBitmap.collectAsState()
     val serverUrl by viewModel.serverUrl.collectAsState()
+    val trustedCount by viewModel.trustedViewersCount.collectAsState()
     var showServerDialog by remember { mutableStateOf(false) }
     var tempUrl by remember { mutableStateOf(serverUrl) }
 
@@ -45,7 +46,8 @@ fun MainScreen(viewModel: CameraViewModel) {
     pendingConsent?.let { request ->
         ConsentDialog(
             request = request,
-            onApprove = { viewModel.approveStream(request) },
+            onApproveOnce = { viewModel.approveStream(request, rememberForever = false) },
+            onApproveAlways = { viewModel.approveStream(request, rememberForever = true) },
             onReject = { viewModel.rejectStream(request) }
         )
     }
@@ -255,6 +257,22 @@ fun MainScreen(viewModel: CameraViewModel) {
                 Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
                     Text("Server:", fontSize = 12.sp, color = Color.Gray)
                     Text(serverUrl, fontSize = 11.sp, color = PrimaryBlue, fontFamily = FontFamily.Monospace)
+                }
+                if (trustedCount > 0) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Trusted Viewers: Active", fontSize = 12.sp, color = AccentGreen, fontWeight = FontWeight.Medium)
+                        TextButton(
+                            onClick = { viewModel.revokeAllTrustedViewers() },
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                        ) {
+                            Text("Revoke Trust", fontSize = 11.sp, color = AccentRed)
+                        }
+                    }
                 }
             }
         }

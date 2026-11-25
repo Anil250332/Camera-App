@@ -1,6 +1,5 @@
 package com.remotestream.camera.ui.screens
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -18,11 +17,13 @@ import com.remotestream.camera.data.model.SessionRequestEvent
 import com.remotestream.camera.ui.theme.AccentGreen
 import com.remotestream.camera.ui.theme.AccentRed
 import com.remotestream.camera.ui.theme.CardDark
+import com.remotestream.camera.ui.theme.PrimaryBlue
 
 @Composable
 fun ConsentDialog(
     request: SessionRequestEvent,
-    onApprove: () -> Unit,
+    onApproveOnce: () -> Unit,
+    onApproveAlways: () -> Unit,
     onReject: () -> Unit
 ) {
     Dialog(onDismissRequest = onReject) {
@@ -30,20 +31,20 @@ fun ConsentDialog(
             shape = RoundedCornerShape(20.dp),
             colors = CardDefaults.cardColors(containerColor = CardDark),
             elevation = CardDefaults.cardElevation(defaultElevation = 12.dp),
-            modifier = Modifier.fillMaxWidth().padding(16.dp)
+            modifier = Modifier.fillMaxWidth().padding(12.dp)
         ) {
             Column(
-                modifier = Modifier.padding(24.dp),
+                modifier = Modifier.padding(22.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Icon(
                     imageVector = Icons.Default.Warning,
                     contentDescription = "Consent Required",
                     tint = AccentRed,
-                    modifier = Modifier.size(48.dp)
+                    modifier = Modifier.size(44.dp)
                 )
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
                 Text(
                     text = "Streaming Request",
@@ -55,7 +56,7 @@ fun ConsentDialog(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
-                    text = "Viewer \"${request.viewerName}\" is requesting permission to view your camera and listen to your microphone.",
+                    text = "\"${request.viewerName}\" is requesting permission to view your camera and listen to your microphone.",
                     fontSize = 14.sp,
                     color = Color.LightGray,
                     lineHeight = 20.sp
@@ -64,32 +65,45 @@ fun ConsentDialog(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
-                    text = "• A persistent notification will remain visible.\n• You can terminate this stream at any moment.",
+                    text = "• A persistent notification will remain visible.\n• Choosing 'Always Allow' trusts this viewer until you revoke access or uninstall the app.",
                     fontSize = 12.sp,
                     color = Color.Gray,
                     modifier = Modifier.align(Alignment.Start)
                 )
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(20.dp))
+
+                Button(
+                    onClick = onApproveAlways,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text("Always Allow (Trust Forever)", fontWeight = FontWeight.Bold)
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     OutlinedButton(
                         onClick = onReject,
                         modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = AccentRed)
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = AccentRed),
+                        shape = RoundedCornerShape(10.dp)
                     ) {
                         Text("Deny")
                     }
 
                     Button(
-                        onClick = onApprove,
+                        onClick = onApproveOnce,
                         modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(containerColor = AccentGreen)
+                        colors = ButtonDefaults.buttonColors(containerColor = AccentGreen),
+                        shape = RoundedCornerShape(10.dp)
                     ) {
-                        Text("Approve", fontWeight = FontWeight.Bold)
+                        Text("Allow Once", fontWeight = FontWeight.Bold)
                     }
                 }
             }
