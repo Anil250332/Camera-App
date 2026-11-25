@@ -101,7 +101,6 @@ class WebRtcManager(
             rtcpMuxPolicy = PeerConnection.RtcpMuxPolicy.REQUIRE
             continualGatheringPolicy = PeerConnection.ContinualGatheringPolicy.GATHER_CONTINUALLY
             keyType = PeerConnection.KeyType.ECDSA
-            enableDtlsSrtp = true // Strict DTLS-SRTP encryption
         }
 
         peerConnection = peerConnectionFactory?.createPeerConnection(rtcConfig, object : PeerConnection.Observer {
