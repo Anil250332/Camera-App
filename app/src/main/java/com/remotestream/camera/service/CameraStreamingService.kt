@@ -32,14 +32,14 @@ class CameraStreamingService : Service() {
                 stopStreamingService()
                 return START_NOT_STICKY
             }
-            ACTION_STANDBY -> {
+            null, ACTION_STANDBY -> {
                 startStandbyForeground()
-                // Ensure socket stays connected even if Activity was swiped away
-                (application as? CameraApp)?.sessionManager?.reconnectSignaling()
+                // Only connect if not already connected (handles START_STICKY restarts cleanly)
+                (application as? CameraApp)?.sessionManager?.connectIfNeeded()
                 return START_STICKY
             }
             else -> {
-                val viewerName = intent?.getStringExtra(EXTRA_VIEWER_NAME) ?: "Authorized Viewer"
+                val viewerName = intent.getStringExtra(EXTRA_VIEWER_NAME) ?: "Authorized Viewer"
                 startForegroundStreaming(viewerName)
                 return START_STICKY
             }

@@ -97,7 +97,11 @@ class StreamSessionManager(private val context: Context) :
 
     fun ensureConnectedAndServiceRunning() {
         CameraStreamingService.startStandby(context)
-        if (signalingClient == null) {
+        connectIfNeeded()
+    }
+
+    fun connectIfNeeded() {
+        if (signalingClient == null || !_isConnectedToSignaling.value) {
             reconnectSignaling()
         }
     }
