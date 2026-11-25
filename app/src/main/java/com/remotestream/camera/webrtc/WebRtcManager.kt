@@ -161,6 +161,20 @@ class WebRtcManager(
         peerConnection?.addIceCandidate(candidate)
     }
 
+    fun switchCamera(onDone: (Boolean) -> Unit = {}) {
+        val capturer = videoCapturer as? CameraVideoCapturer ?: return
+        capturer.switchCamera(object : CameraVideoCapturer.CameraSwitchHandler {
+            override fun onCameraSwitchDone(isFrontCamera: Boolean) {
+                Log.d(TAG, "Switched camera. Front facing: $isFrontCamera")
+                onDone(isFrontCamera)
+            }
+
+            override fun onCameraSwitchError(errorDescription: String?) {
+                Log.e(TAG, "Camera switch error: $errorDescription")
+            }
+        })
+    }
+
     fun stopStreaming() {
         try {
             videoCapturer?.stopCapture()

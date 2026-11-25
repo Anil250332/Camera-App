@@ -25,6 +25,7 @@ class SocketSignalingClient(
         fun onOfferReceived(sdp: SessionDescription, sessionId: String, senderDeviceId: String)
         fun onAnswerReceived(sdp: SessionDescription, sessionId: String, senderDeviceId: String)
         fun onIceCandidateReceived(candidate: IceCandidate, sessionId: String, senderDeviceId: String)
+        fun onSwitchCameraRequested()
         fun onStreamEnded(message: String)
         fun onError(message: String)
     }
@@ -129,6 +130,10 @@ class SocketSignalingClient(
                 val sessionId = data.getString("sessionId")
                 val senderDeviceId = data.getString("senderDeviceId")
                 listener.onIceCandidateReceived(candidate, sessionId, senderDeviceId)
+            }
+
+            socket?.on("switch-camera") {
+                listener.onSwitchCameraRequested()
             }
 
             socket?.on("stream-ended") { args ->

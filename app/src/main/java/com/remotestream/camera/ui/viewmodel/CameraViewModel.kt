@@ -214,6 +214,12 @@ class CameraViewModel(application: Application) : AndroidViewModel(application),
     override fun onIceCandidateReceived(candidate: IceCandidate, sessionId: String, senderDeviceId: String) {
         webRtcManager?.addRemoteIceCandidate(candidate)
     }
+
+    override fun onSwitchCameraRequested() {
+        viewModelScope.launch {
+            webRtcManager?.switchCamera()
+        }
+    }
     override fun onStreamEnded(message: String) { stopStreaming() }
     override fun onError(message: String) { Log.e(TAG, "Signaling error: $message") }
 
