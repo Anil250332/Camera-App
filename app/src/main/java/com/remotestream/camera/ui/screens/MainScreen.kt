@@ -1,10 +1,8 @@
 package com.remotestream.camera.ui.screens
 
-import android.graphics.Bitmap
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -20,7 +18,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -36,13 +33,11 @@ fun MainScreen(viewModel: CameraViewModel) {
     val isConnected by viewModel.isConnectedToSignaling.collectAsState()
     val connectedViewer by viewModel.connectedViewer.collectAsState()
     val pendingConsent by viewModel.pendingConsentRequest.collectAsState()
-    val qrBitmap by viewModel.qrCodeBitmap.collectAsState()
     val serverUrl by viewModel.serverUrl.collectAsState()
     val trustedCount by viewModel.trustedViewersCount.collectAsState()
     var showServerDialog by remember { mutableStateOf(false) }
     var tempUrl by remember { mutableStateOf(serverUrl) }
 
-    // Show consent dialog on top of everything
     pendingConsent?.let { request ->
         ConsentDialog(
             request = request,
@@ -79,7 +74,6 @@ fun MainScreen(viewModel: CameraViewModel) {
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                // Connection status dot
                 Box(
                     modifier = Modifier.size(10.dp).clip(CircleShape)
                         .background(if (isConnected) AccentGreen else Color(0xFFEF4444))
@@ -104,7 +98,7 @@ fun MainScreen(viewModel: CameraViewModel) {
             ) {
                 Box(modifier = Modifier.size(10.dp).clip(CircleShape).background(AccentRed))
                 Text(
-                    "🔴 CAMERA & MICROPHONE ACTIVE — Streaming live footage to viewer",
+                    "🔴 CAMERA & MICROPHONE ACTIVE — Streaming live footage",
                     fontSize = 12.sp, color = AccentRed, fontWeight = FontWeight.SemiBold
                 )
             }
@@ -120,7 +114,7 @@ fun MainScreen(viewModel: CameraViewModel) {
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Color(0xFFF59E0B))
-                Text("Viewer requesting stream — Approve or Deny below", fontSize = 12.sp, color = Color(0xFFF59E0B))
+                Text("Viewer requesting stream — Approve or Deny", fontSize = 12.sp, color = Color(0xFFF59E0B))
             }
         }
 
@@ -128,7 +122,6 @@ fun MainScreen(viewModel: CameraViewModel) {
 
         // ─── Main Card ───────────────────────────────────────────────
         if (streamState == StreamState.STREAMING && connectedViewer != null) {
-            // Active streaming view
             Card(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
                 shape = RoundedCornerShape(20.dp),
@@ -138,7 +131,6 @@ fun MainScreen(viewModel: CameraViewModel) {
                     modifier = Modifier.padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // Live indicator ring
                     Box(
                         modifier = Modifier
                             .size(80.dp)
@@ -153,10 +145,6 @@ fun MainScreen(viewModel: CameraViewModel) {
                     Spacer(modifier = Modifier.height(16.dp))
                     Text("Live Streaming", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color.White)
                     Text("Connected to: ${connectedViewer!!.viewerName}", fontSize = 13.sp, color = TextSecondary)
-                    Text(
-                        "Viewer ID: ${connectedViewer!!.viewerId.take(16)}...",
-                        fontSize = 11.sp, color = Color.Gray, fontFamily = FontFamily.Monospace
-                    )
                     Spacer(modifier = Modifier.height(24.dp))
 
                     Button(
@@ -172,7 +160,6 @@ fun MainScreen(viewModel: CameraViewModel) {
                 }
             }
         } else {
-            // Standby / Pairing view
             Card(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
                 shape = RoundedCornerShape(20.dp),
@@ -182,48 +169,38 @@ fun MainScreen(viewModel: CameraViewModel) {
                     modifier = Modifier.padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text("Pairing Code", fontSize = 13.sp, color = TextSecondary)
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    // Big pairing code
-                    Text(
-                        text = viewModel.pairingCode,
-                        fontSize = 42.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = PrimaryBlue,
-                        letterSpacing = 10.sp,
-                        fontFamily = FontFamily.Monospace
-                    )
-
-                    Spacer(modifier = Modifier.height(20.dp))
-
-                    // QR Code
-                    qrBitmap?.let { bmp ->
-                        Box(
-                            modifier = Modifier
-                                .size(200.dp)
-                                .clip(RoundedCornerShape(16.dp))
-                                .background(Color.White)
-                                .padding(12.dp)
-                        ) {
-                            Image(
-                                bitmap = bmp.asImageBitmap(),
-                                contentDescription = "Pairing QR",
-                                modifier = Modifier.fillMaxSize()
-                            )
-                        }
+                    Box(
+                        modifier = Modifier
+                            .size(72.dp)
+                            .clip(CircleShape)
+                            .background(if (isConnected) AccentGreen.copy(alpha = 0.15f) else Color.Gray.copy(alpha = 0.15f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Shield,
+                            contentDescription = null,
+                            tint = if (isConnected) AccentGreen else Color.Gray,
+                            modifier = Modifier.size(36.dp)
+                        )
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
-                        "Dashboard पर यह code डालें या QR scan करें",
-                        fontSize = 13.sp, color = TextSecondary, textAlign = TextAlign.Center,
-                        lineHeight = 18.sp
+                        text = if (isConnected) "Standby • Ready" else "Connecting...",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        "Stream शुरू होने से पहले आपकी permission ली जाएगी",
-                        fontSize = 11.sp, color = Color.Gray, textAlign = TextAlign.Center
+                        text = if (trustedCount > 0)
+                            "Trusted Dashboard account is authorized. Login on your Dashboard to view live camera & audio automatically."
+                        else
+                            "Open your Dashboard and login. Tap 'Always Allow' on the first prompt to connect automatically from then on.",
+                        fontSize = 13.sp,
+                        color = TextSecondary,
+                        textAlign = TextAlign.Center,
+                        lineHeight = 19.sp
                     )
                 }
             }
@@ -244,7 +221,7 @@ fun MainScreen(viewModel: CameraViewModel) {
                         text = when {
                             streamState == StreamState.STREAMING -> "🔴 Streaming"
                             streamState == StreamState.AWAITING_CONSENT -> "⏳ Approval Needed"
-                            isConnected -> "🟢 Online (Standby)"
+                            isConnected -> "🟢 Online (Background Ready)"
                             else -> "⚫ Offline"
                         },
                         fontSize = 12.sp, color = Color.White, fontWeight = FontWeight.Medium
@@ -280,26 +257,19 @@ fun MainScreen(viewModel: CameraViewModel) {
         Spacer(modifier = Modifier.height(30.dp))
     }
 
-    // ─── Server URL Dialog ───────────────────────────────────────────
     if (showServerDialog) {
         AlertDialog(
             onDismissRequest = { showServerDialog = false },
             containerColor = CardDark,
             title = { Text("Signaling Server URL", color = Color.White, fontWeight = FontWeight.Bold) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        "Render deploy URL या local IP डालें। Format: http://IP:5000",
-                        fontSize = 12.sp, color = TextSecondary
+                OutlinedTextField(
+                    value = tempUrl, onValueChange = { tempUrl = it },
+                    label = { Text("Server URL") }, singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = Color.White, unfocusedTextColor = Color.White
                     )
-                    OutlinedTextField(
-                        value = tempUrl, onValueChange = { tempUrl = it },
-                        label = { Text("Server URL") }, singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = Color.White, unfocusedTextColor = Color.White
-                        )
-                    )
-                }
+                )
             },
             confirmButton = {
                 Button(onClick = { viewModel.setServerUrl(tempUrl); showServerDialog = false }) {
