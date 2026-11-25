@@ -113,10 +113,8 @@ class CameraStreamingService : Service() {
         }
 
         fun stop(context: Context) {
-            val intent = Intent(context, CameraStreamingService::class.java).apply {
-                action = ACTION_STOP
-            }
-            context.startService(intent)
+            // Stop service directly without broadcasting STOP_STREAM (avoids infinite loop with ViewModel)
+            context.stopService(Intent(context, CameraStreamingService::class.java))
         }
     }
 }

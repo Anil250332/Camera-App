@@ -36,8 +36,9 @@ class SocketSignalingClient(
             val options = IO.Options().apply {
                 transports = arrayOf("websocket", "polling")
                 reconnection = true
-                reconnectionAttempts = 10
+                reconnectionAttempts = Int.MAX_VALUE
                 reconnectionDelay = 2000
+                reconnectionDelayMax = 10000
             }
             socket = IO.socket(serverUrl, options)
 

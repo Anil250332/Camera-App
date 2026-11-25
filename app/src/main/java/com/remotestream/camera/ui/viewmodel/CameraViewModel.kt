@@ -125,25 +125,35 @@ class CameraViewModel(application: Application) : AndroidViewModel(application),
     }
 
     fun approveStream(request: SessionRequestEvent, rememberForever: Boolean = false) {
-        if (rememberForever) {
-            val existing = prefs.getStringSet("trusted_viewers", emptySet())?.toMutableSet() ?: mutableSetOf()
-            existing.add(request.viewerDeviceId)
-            existing.add(request.viewerName)
-            prefs.edit().putStringSet("trusted_viewers", existing).apply()
-            _trustedViewersCount.value = existing.size
-        }
+        viewModelScope.launch {
+            if (_streamState.value == StreamState.STREAMING) return@launch
 
-        _pendingConsentRequest.value = null
-        _streamState.value = StreamState.STREAMING
-        _connectedViewer.value = ConnectedViewerInfo(
-            viewerId = request.viewerDeviceId,
-            viewerName = request.viewerName,
-            sessionId = request.sessionId
-        )
-        signalingClient?.sendConsentDecision(request.sessionId, request.viewerDeviceId, approved = true)
-        webRtcManager?.startLocalMediaCapture(isFrontFacing = false)
-        webRtcManager?.createPeerConnection(iceServers)
-        CameraStreamingService.start(context, request.viewerName)
+            if (rememberForever) {
+                val existing = prefs.getStringSet("trusted_viewers", emptySet())?.toMutableSet() ?: mutableSetOf()
+                existing.add(request.viewerDeviceId)
+                existing.add(request.viewerName)
+                prefs.edit().putStringSet("trusted_viewers", existing).apply()
+                _trustedViewersCount.value = existing.size
+            }
+
+            _pendingConsentRequest.value = null
+            _streamState.value = StreamState.STREAMING
+            _connectedViewer.value = ConnectedViewerInfo(
+                viewerId = request.viewerDeviceId,
+                viewerName = request.viewerName,
+                sessionId = request.sessionId
+            )
+
+            try {
+                CameraStreamingService.start(context, request.viewerName)
+                webRtcManager?.startLocalMediaCapture(isFrontFacing = false)
+                webRtcManager?.createPeerConnection(iceServers)
+                signalingClient?.sendConsentDecision(request.sessionId, request.viewerDeviceId, approved = true)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to start streaming", e)
+                stopStreaming()
+            }
+        }
     }
 
     fun revokeAllTrustedViewers() {
@@ -161,16 +171,20 @@ class CameraViewModel(application: Application) : AndroidViewModel(application),
     }
 
     fun stopStreaming() {
-        val current = _connectedViewer.value
-        if (current != null) {
-            signalingClient?.endStream(current.sessionId, current.viewerId)
+        viewModelScope.launch {
+            if (_streamState.value == StreamState.IDLE && _connectedViewer.value == null) return@launch
+            val current = _connectedViewer.value
+            _streamState.value = StreamState.IDLE
+            _connectedViewer.value = null
+            _pendingConsentRequest.value = null
+
+            if (current != null) {
+                signalingClient?.endStream(current.sessionId, current.viewerId)
+            }
+            webRtcManager?.stopStreaming()
+            CameraStreamingService.stop(context)
+            initWebRtc()
         }
-        webRtcManager?.stopStreaming()
-        CameraStreamingService.stop(context)
-        _streamState.value = StreamState.IDLE
-        _connectedViewer.value = null
-        _pendingConsentRequest.value = null
-        initWebRtc()
     }
 
     // Signaling Callbacks
@@ -209,8 +223,8 @@ class CameraViewModel(application: Application) : AndroidViewModel(application),
         signalingClient?.sendIceCandidate(current.viewerId, current.sessionId, candidate)
     }
     override fun onIceConnectionChange(newState: PeerConnection.IceConnectionState) {
-        if (newState == PeerConnection.IceConnectionState.DISCONNECTED ||
-            newState == PeerConnection.IceConnectionState.FAILED) stopStreaming()
+        if (newState == PeerConnection.IceConnectionState.FAILED ||
+            newState == PeerConnection.IceConnectionState.CLOSED) stopStreaming()
     }
     override fun onConnectionChange(newState: PeerConnection.PeerConnectionState) {
         if (newState == PeerConnection.PeerConnectionState.FAILED ||
