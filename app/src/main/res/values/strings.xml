@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">Remote Camera Streamer</string>
+    <string name="camera_permission_rationale">This app requires camera access to stream live video when you explicitly approve a session.</string>
+    <string name="mic_permission_rationale">This app requires microphone access to stream live audio alongside video.</string>
+    <string name="notification_channel_name">Live Streaming Service</string>
+    <string name="notification_channel_desc">Shows a persistent notification while the camera and microphone are actively streaming to an authorized viewer.</string>
+</resources>

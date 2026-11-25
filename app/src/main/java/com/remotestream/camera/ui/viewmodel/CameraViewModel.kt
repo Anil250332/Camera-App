@@ -1,0 +1,205 @@
+package com.remotestream.camera.ui.viewmodel
+
+import android.app.Application
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Color as AndroidColor
+import android.os.Build
+import android.util.Log
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.qrcode.QRCodeWriter
+import com.remotestream.camera.data.model.ConnectedViewerInfo
+import com.remotestream.camera.data.model.SessionRequestEvent
+import com.remotestream.camera.data.model.StreamState
+import com.remotestream.camera.data.network.SocketSignalingClient
+import com.remotestream.camera.service.CameraStreamingService
+import com.remotestream.camera.webrtc.WebRtcManager
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import org.webrtc.*
+
+class CameraViewModel(application: Application) : AndroidViewModel(application),
+    SocketSignalingClient.SignalingEventListener,
+    WebRtcManager.WebRtcEventListener {
+
+    private val context = application.applicationContext
+    private val prefs = context.getSharedPreferences("streamer_prefs", Context.MODE_PRIVATE)
+
+    // Persist deviceId and pairingCode so dashboard can always find this device
+    val deviceId: String = prefs.getString("device_id", null)
+        ?: ("cam_" + System.currentTimeMillis().toString(36)).also {
+            prefs.edit().putString("device_id", it).apply()
+        }
+
+    val pairingCode: String = prefs.getString("pairing_code", null)
+        ?: generatePairingCode().also {
+            prefs.edit().putString("pairing_code", it).apply()
+        }
+
+    val deviceName: String = Build.MANUFACTURER.replaceFirstChar { it.uppercase() } +
+            " " + Build.MODEL
+
+    private val _serverUrl = MutableStateFlow(
+        prefs.getString("server_url", "https://camera-app-backend-q7p5.onrender.com") ?: "https://camera-app-backend-q7p5.onrender.com"
+    )
+    val serverUrl: StateFlow<String> = _serverUrl.asStateFlow()
+
+    private val _streamState = MutableStateFlow(StreamState.IDLE)
+    val streamState: StateFlow<StreamState> = _streamState.asStateFlow()
+
+    private val _isConnectedToSignaling = MutableStateFlow(false)
+    val isConnectedToSignaling: StateFlow<Boolean> = _isConnectedToSignaling.asStateFlow()
+
+    private val _pendingConsentRequest = MutableStateFlow<SessionRequestEvent?>(null)
+    val pendingConsentRequest: StateFlow<SessionRequestEvent?> = _pendingConsentRequest.asStateFlow()
+
+    private val _connectedViewer = MutableStateFlow<ConnectedViewerInfo?>(null)
+    val connectedViewer: StateFlow<ConnectedViewerInfo?> = _connectedViewer.asStateFlow()
+
+    private val _qrCodeBitmap = MutableStateFlow<Bitmap?>(null)
+    val qrCodeBitmap: StateFlow<Bitmap?> = _qrCodeBitmap.asStateFlow()
+
+    private var signalingClient: SocketSignalingClient? = null
+    private var webRtcManager: WebRtcManager? = null
+    private val rootEglBase = EglBase.create()
+    private var iceServers: List<PeerConnection.IceServer> = listOf(
+        PeerConnection.IceServer.builder("stun:stun.l.google.com:19302").createIceServer(),
+        PeerConnection.IceServer.builder("stun:stun1.l.google.com:19302").createIceServer()
+    )
+
+    init {
+        generateQrBitmap()
+        initWebRtc()
+    }
+
+    private fun initWebRtc() {
+        webRtcManager = WebRtcManager(context, rootEglBase.eglBaseContext, this)
+    }
+
+    fun setServerUrl(url: String) {
+        val trimmed = url.trim()
+        _serverUrl.value = trimmed
+        prefs.edit().putString("server_url", trimmed).apply()
+        reconnectSignaling()
+    }
+
+    fun reconnectSignaling() {
+        signalingClient?.disconnect()
+        signalingClient = SocketSignalingClient(_serverUrl.value, deviceId, deviceName, pairingCode, this)
+        signalingClient?.connect()
+    }
+
+    private fun generatePairingCode(): String {
+        val chars = ('A'..'Z') + ('0'..'9')
+        return (1..6).map { chars.random() }.joinToString("")
+    }
+
+    private fun generateQrBitmap() {
+        viewModelScope.launch {
+            try {
+                // QR encodes the pairing code + server URL so dashboard can auto-connect
+                val qrData = """{"type":"cam_stream","code":"$pairingCode","deviceId":"$deviceId","server":"${_serverUrl.value}"}"""
+                val writer = QRCodeWriter()
+                val matrix = writer.encode(qrData, BarcodeFormat.QR_CODE, 512, 512)
+                val w = matrix.width; val h = matrix.height
+                val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.RGB_565)
+                for (x in 0 until w) {
+                    for (y in 0 until h) {
+                        bmp.setPixel(x, y, if (matrix[x, y]) AndroidColor.BLACK else AndroidColor.WHITE)
+                    }
+                }
+                _qrCodeBitmap.value = bmp
+            } catch (e: Exception) {
+                Log.e(TAG, "QR generation error", e)
+            }
+        }
+    }
+
+    fun approveStream(request: SessionRequestEvent) {
+        _pendingConsentRequest.value = null
+        _streamState.value = StreamState.STREAMING
+        _connectedViewer.value = ConnectedViewerInfo(
+            viewerId = request.viewerDeviceId,
+            viewerName = request.viewerName,
+            sessionId = request.sessionId
+        )
+        signalingClient?.sendConsentDecision(request.sessionId, request.viewerDeviceId, approved = true)
+        webRtcManager?.startLocalMediaCapture(isFrontFacing = false)
+        webRtcManager?.createPeerConnection(iceServers)
+        CameraStreamingService.start(context, request.viewerName)
+    }
+
+    fun rejectStream(request: SessionRequestEvent) {
+        _pendingConsentRequest.value = null
+        signalingClient?.sendConsentDecision(request.sessionId, request.viewerDeviceId, approved = false)
+        if (_streamState.value == StreamState.AWAITING_CONSENT) {
+            _streamState.value = StreamState.IDLE
+        }
+    }
+
+    fun stopStreaming() {
+        val current = _connectedViewer.value
+        if (current != null) {
+            signalingClient?.endStream(current.sessionId, current.viewerId)
+        }
+        webRtcManager?.stopStreaming()
+        CameraStreamingService.stop(context)
+        _streamState.value = StreamState.IDLE
+        _connectedViewer.value = null
+        _pendingConsentRequest.value = null
+        initWebRtc()
+    }
+
+    // Signaling Callbacks
+    override fun onConnected() { _isConnectedToSignaling.value = true }
+    override fun onDisconnected() { _isConnectedToSignaling.value = false }
+    override fun onRegistered(iceServers: List<PeerConnection.IceServer>) {
+        if (iceServers.isNotEmpty()) this.iceServers = iceServers
+    }
+    override fun onStreamRequested(request: SessionRequestEvent) {
+        _pendingConsentRequest.value = request
+        _streamState.value = StreamState.AWAITING_CONSENT
+    }
+    override fun onOfferReceived(sdp: SessionDescription, sessionId: String, senderDeviceId: String) {
+        webRtcManager?.handleRemoteOffer(sdp) { answer ->
+            signalingClient?.sendAnswer(senderDeviceId, sessionId, answer)
+        }
+    }
+    override fun onAnswerReceived(sdp: SessionDescription, sessionId: String, senderDeviceId: String) {
+        webRtcManager?.handleRemoteAnswer(sdp)
+    }
+    override fun onIceCandidateReceived(candidate: IceCandidate, sessionId: String, senderDeviceId: String) {
+        webRtcManager?.addRemoteIceCandidate(candidate)
+    }
+    override fun onStreamEnded(message: String) { stopStreaming() }
+    override fun onError(message: String) { Log.e(TAG, "Signaling error: $message") }
+
+    // WebRTC Callbacks
+    override fun onIceCandidate(candidate: IceCandidate) {
+        val current = _connectedViewer.value ?: return
+        signalingClient?.sendIceCandidate(current.viewerId, current.sessionId, candidate)
+    }
+    override fun onIceConnectionChange(newState: PeerConnection.IceConnectionState) {
+        if (newState == PeerConnection.IceConnectionState.DISCONNECTED ||
+            newState == PeerConnection.IceConnectionState.FAILED) stopStreaming()
+    }
+    override fun onConnectionChange(newState: PeerConnection.PeerConnectionState) {
+        if (newState == PeerConnection.PeerConnectionState.FAILED ||
+            newState == PeerConnection.PeerConnectionState.CLOSED) stopStreaming()
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        stopStreaming()
+        signalingClient?.disconnect()
+        rootEglBase.release()
+    }
+
+    companion object {
+        private const val TAG = "CameraViewModel"
+    }
+}
