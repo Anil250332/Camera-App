@@ -74,7 +74,7 @@ fun MainScreen(viewModel: CameraViewModel) {
                     Icon(Icons.Default.Videocam, contentDescription = null, tint = Color.White, modifier = Modifier.size(24.dp))
                 }
                 Column {
-                    Text("Camera Streamer", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    Text("CamGuard", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White)
                     Text(viewModel.deviceName, fontSize = 11.sp, color = TextSecondary)
                 }
             }
