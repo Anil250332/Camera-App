@@ -14,7 +14,7 @@ class CameraApp : Application() {
         super.onCreate()
         instance = this
         val initOptions = PeerConnectionFactory.InitializationOptions.builder(this)
-            .setEnableInternalTracer(true)
+            .setEnableInternalTracer(false)
             .createInitializationOptions()
         PeerConnectionFactory.initialize(initOptions)
     }

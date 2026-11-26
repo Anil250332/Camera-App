@@ -80,12 +80,15 @@ class StreamSessionManager(private val context: Context) :
     )
 
     init {
-        generateQrBitmap()
-        initWebRtc()
+        scope.launch(Dispatchers.Default) {
+            initWebRtc()
+        }
     }
 
     private fun initWebRtc() {
-        webRtcManager = WebRtcManager(context, rootEglBase.eglBaseContext, this)
+        if (webRtcManager == null) {
+            webRtcManager = WebRtcManager(context, rootEglBase.eglBaseContext, this)
+        }
     }
 
     fun setServerUrl(url: String) {

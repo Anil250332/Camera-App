@@ -83,8 +83,8 @@ class WebRtcManager(
             surfaceTextureHelper = SurfaceTextureHelper.create("WebRtcCaptureThread", eglBaseContext)
             videoSource = factory.createVideoSource(videoCapturer!!.isScreencast)
             videoCapturer?.initialize(surfaceTextureHelper, context, videoSource?.capturerObserver)
-            // Stream at standard 720p 30fps
-            videoCapturer?.startCapture(1280, 720, 30)
+            // Stream at optimized 960x540 at 30fps for ultra-low latency mobile streaming
+            videoCapturer?.startCapture(960, 540, 30)
 
             videoTrack = factory.createVideoTrack("ARDAMSv0", videoSource)
             videoTrack?.setEnabled(true)
