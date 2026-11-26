@@ -4,11 +4,19 @@ import android.util.Log
 import com.remotestream.camera.data.model.SessionRequestEvent
 import io.socket.client.IO
 import io.socket.client.Socket
+import okhttp3.Call
+import okhttp3.Callback
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.Response
 import org.json.JSONArray
 import org.json.JSONObject
 import org.webrtc.IceCandidate
 import org.webrtc.PeerConnection
 import org.webrtc.SessionDescription
+import java.io.IOException
 
 class SocketSignalingClient(
     private val serverUrl: String,
@@ -31,6 +39,36 @@ class SocketSignalingClient(
     }
 
     private var socket: Socket? = null
+    private val httpClient = OkHttpClient()
+
+    private fun syncRoomViaPost(socketId: String?) {
+        if (socketId.isNullOrBlank()) return
+        try {
+            val base = serverUrl.trimEnd('/')
+            val payload = JSONObject().apply {
+                put("deviceId", deviceId)
+                put("deviceName", deviceName)
+                put("deviceType", "camera")
+                put("socketId", socketId)
+                put("room", "camguard_room")
+            }
+            val body = payload.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
+            val req = Request.Builder()
+                .url("$base/api/devices/room/join")
+                .post(body)
+                .build()
+            httpClient.newCall(req).enqueue(object : Callback {
+                override fun onFailure(call: Call, e: IOException) {
+                    Log.w(TAG, "Room sync POST failed: ${e.message}")
+                }
+                override fun onResponse(call: Call, response: Response) {
+                    response.close()
+                }
+            })
+        } catch (e: Exception) {
+            Log.w(TAG, "Room sync setup error: ${e.message}")
+        }
+    }
 
     fun connect() {
         try {
@@ -46,10 +84,11 @@ class SocketSignalingClient(
             socket = IO.socket(serverUrl, options)
 
             socket?.on(Socket.EVENT_CONNECT) {
-                Log.d(TAG, "Socket connected: ${socket?.id()}")
+                val sid = socket?.id()
+                Log.d(TAG, "Socket connected: $sid")
                 listener.onConnected()
 
-                // Register camera device on server — include pairingCode so dashboard can find us
+                // Register camera device into shared room & sync socket ID via POST route
                 val registerObj = JSONObject().apply {
                     put("deviceId", deviceId)
                     put("deviceName", deviceName)
@@ -57,6 +96,20 @@ class SocketSignalingClient(
                     put("pairingCode", pairingCode)
                 }
                 socket?.emit("register-device", registerObj)
+                syncRoomViaPost(sid)
+            }
+
+            socket?.on("viewer-room-sync") {
+                Log.d(TAG, "Viewer joined room — broadcasting camera readiness")
+                val readyObj = JSONObject().apply {
+                    put("cameraDeviceId", deviceId)
+                    put("room", "camguard_room")
+                }
+                socket?.emit("camera-ready", readyObj)
+            }
+
+            socket?.on("socket-replaced") {
+                Log.d(TAG, "Previous socket evicted by newer socket in room")
             }
 
             socket?.on("registered") { args ->
