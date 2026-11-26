@@ -12,8 +12,10 @@ import com.remotestream.camera.data.model.SessionRequestEvent
 import com.remotestream.camera.data.model.StreamState
 import com.remotestream.camera.data.network.SocketSignalingClient
 import com.remotestream.camera.webrtc.WebRtcManager
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -31,6 +33,7 @@ class StreamSessionManager(private val context: Context) :
     WebRtcManager.WebRtcEventListener {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private var approveJob: Job? = null
     private val prefs = context.getSharedPreferences("streamer_prefs", Context.MODE_PRIVATE)
 
     val deviceId: String = prefs.getString("device_id", null)
@@ -142,11 +145,11 @@ class StreamSessionManager(private val context: Context) :
     }
 
     fun approveStream(request: SessionRequestEvent, rememberForever: Boolean = false) {
-        scope.launch {
+        approveJob?.cancel()
+        approveJob = scope.launch {
             if (_streamState.value == StreamState.STREAMING) {
-                // Clean up previous session first so new dashboard login connects cleanly
+                // Clean up previous WebRTC resources before replacing session
                 webRtcManager?.stopStreaming()
-                initWebRtc()
             }
 
             if (rememberForever) {
@@ -185,6 +188,8 @@ class StreamSessionManager(private val context: Context) :
                 webRtcManager?.startLocalMediaCapture(isFrontFacing = false)
                 webRtcManager?.createPeerConnection(iceServers)
                 signalingClient?.sendConsentDecision(request.sessionId, request.viewerDeviceId, approved = true)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to start streaming", e)
                 stopStreaming()
@@ -207,6 +212,8 @@ class StreamSessionManager(private val context: Context) :
     }
 
     fun stopStreaming() {
+        approveJob?.cancel()
+        approveJob = null
         scope.launch {
             if (_streamState.value == StreamState.IDLE && _connectedViewer.value == null) return@launch
             val current = _connectedViewer.value
@@ -276,16 +283,15 @@ class StreamSessionManager(private val context: Context) :
     }
 
     override fun onIceConnectionChange(newState: PeerConnection.IceConnectionState) {
-        if (newState == PeerConnection.IceConnectionState.FAILED ||
-            newState == PeerConnection.IceConnectionState.CLOSED) {
-            stopStreaming()
+        if (newState == PeerConnection.IceConnectionState.FAILED) {
+            Log.w(TAG, "ICE failed — attempting ICE restart instead of ending session")
+            webRtcManager?.restartIce()
         }
     }
 
     override fun onConnectionChange(newState: PeerConnection.PeerConnectionState) {
-        if (newState == PeerConnection.PeerConnectionState.FAILED ||
-            newState == PeerConnection.PeerConnectionState.CLOSED) {
-            stopStreaming()
+        if (newState == PeerConnection.PeerConnectionState.FAILED) {
+            Log.w(TAG, "PeerConnection state FAILED — keeping session open until panel disconnects")
         }
     }
 

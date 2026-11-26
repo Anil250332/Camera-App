@@ -24,6 +24,9 @@ class WebRtcManager(
     private var audioSource: AudioSource? = null
     private var audioTrack: AudioTrack? = null
 
+    @Volatile
+    private var connectionGeneration: Long = 0L
+
     init {
         buildPeerConnectionFactory()
     }
@@ -95,8 +98,9 @@ class WebRtcManager(
     }
 
     fun createPeerConnection(iceServers: List<PeerConnection.IceServer>) {
+        val gen = ++connectionGeneration
         val rtcConfig = PeerConnection.RTCConfiguration(iceServers).apply {
-            tcpCandidatePolicy = PeerConnection.TcpCandidatePolicy.DISABLED
+            tcpCandidatePolicy = PeerConnection.TcpCandidatePolicy.ENABLED
             bundlePolicy = PeerConnection.BundlePolicy.MAXBUNDLE
             rtcpMuxPolicy = PeerConnection.RtcpMuxPolicy.REQUIRE
             continualGatheringPolicy = PeerConnection.ContinualGatheringPolicy.GATHER_CONTINUALLY
@@ -105,15 +109,18 @@ class WebRtcManager(
 
         peerConnection = peerConnectionFactory?.createPeerConnection(rtcConfig, object : PeerConnection.Observer {
             override fun onIceCandidate(candidate: IceCandidate) {
+                if (gen != connectionGeneration) return
                 listener.onIceCandidate(candidate)
             }
 
             override fun onIceConnectionChange(newState: PeerConnection.IceConnectionState) {
+                if (gen != connectionGeneration) return
                 Log.d(TAG, "ICE connection state: $newState")
                 listener.onIceConnectionChange(newState)
             }
 
             override fun onConnectionChange(newState: PeerConnection.PeerConnectionState) {
+                if (gen != connectionGeneration) return
                 Log.d(TAG, "PeerConnection state: $newState")
                 listener.onConnectionChange(newState)
             }
@@ -175,7 +182,12 @@ class WebRtcManager(
         })
     }
 
+    fun restartIce() {
+        peerConnection?.restartIce()
+    }
+
     fun stopStreaming() {
+        connectionGeneration++
         try {
             videoCapturer?.stopCapture()
         } catch (e: Exception) {
