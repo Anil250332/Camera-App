@@ -107,10 +107,11 @@ class StreamSessionManager(private val context: Context) :
         connectIfNeeded()
     }
 
+    @Synchronized
     fun connectIfNeeded() {
-        val alive = signalingClient?.isSocketConnected() == true
-        if (signalingClient == null || !_isConnectedToSignaling.value || !alive) {
-            Log.i(TAG, "[${System.currentTimeMillis()}] connectIfNeeded -> reconnecting signaling (alive=$alive)")
+        val activeOrConnecting = signalingClient?.isConnectingOrConnected() == true
+        if (signalingClient == null || !activeOrConnecting) {
+            Log.i(TAG, "[${System.currentTimeMillis()}] connectIfNeeded -> reconnecting signaling (activeOrConnecting=$activeOrConnecting)")
             reconnectSignaling()
         }
     }

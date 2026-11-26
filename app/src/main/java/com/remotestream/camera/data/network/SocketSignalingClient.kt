@@ -41,6 +41,9 @@ class SocketSignalingClient(
     private var socket: Socket? = null
     private val httpClient = OkHttpClient()
 
+    @Volatile
+    private var isConnecting: Boolean = false
+
     private fun syncRoomViaPost(socketId: String?) {
         if (socketId.isNullOrBlank()) return
         try {
@@ -72,6 +75,7 @@ class SocketSignalingClient(
 
     fun connect() {
         try {
+            isConnecting = true
             val options = IO.Options().apply {
                 transports = arrayOf("websocket", "polling")
                 upgrade = true
@@ -84,6 +88,7 @@ class SocketSignalingClient(
             socket = IO.socket(serverUrl, options)
 
             socket?.on(Socket.EVENT_CONNECT) {
+                isConnecting = false
                 val sid = socket?.id()
                 Log.i(TAG, "[${System.currentTimeMillis()}] Socket CONNECTED id=$sid deviceId=$deviceId")
                 listener.onConnected()
@@ -135,12 +140,14 @@ class SocketSignalingClient(
             }
 
             socket?.on(Socket.EVENT_DISCONNECT) { args ->
+                isConnecting = false
                 val reason = args.firstOrNull()?.toString() ?: "unknown"
                 Log.w(TAG, "[${System.currentTimeMillis()}] Socket DISCONNECTED reason=$reason")
                 listener.onDisconnected()
             }
 
             socket?.on(Socket.EVENT_CONNECT_ERROR) { args ->
+                isConnecting = false
                 val err = args.firstOrNull()?.toString() ?: "connect_error"
                 Log.w(TAG, "[${System.currentTimeMillis()}] Socket CONNECT_ERROR err=$err")
             }
@@ -271,6 +278,8 @@ class SocketSignalingClient(
 
     fun isSocketConnected(): Boolean = socket?.connected() == true
 
+    fun isConnectingOrConnected(): Boolean = isConnecting || isSocketConnected()
+
     fun sendHeartbeat() {
         if (socket?.connected() == true) {
             val obj = JSONObject().apply {
@@ -282,6 +291,7 @@ class SocketSignalingClient(
     }
 
     fun disconnect() {
+        isConnecting = false
         Log.i(TAG, "[${System.currentTimeMillis()}] Socket manual disconnect() called")
         socket?.disconnect()
         socket?.off()
