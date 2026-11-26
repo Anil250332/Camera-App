@@ -171,7 +171,16 @@ fun MainScreen(viewModel: CameraViewModel) {
                     Text("Connected to: ${connectedViewer!!.viewerName}", fontSize = 13.sp, color = TextSecondary)
                     Spacer(modifier = Modifier.height(24.dp))
 
-                    
+                    Button(
+                        onClick = { viewModel.stopStreaming() },
+                        colors = ButtonDefaults.buttonColors(containerColor = AccentRed),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth().height(52.dp)
+                    ) {
+                        Icon(Icons.Default.StopCircle, contentDescription = null, modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text("Stop Streaming", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    }
                 }
             }
         } else {
@@ -310,7 +319,7 @@ fun MainScreen(viewModel: CameraViewModel) {
                             onClick = { viewModel.revokeAllTrustedViewers() },
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
                         ) {
-                            Text("a", fontSize = 11.sp, color = AccentRed)
+                            Text("Revoke Trust", fontSize = 11.sp, color = AccentRed)
                         }
                     }
                 }
