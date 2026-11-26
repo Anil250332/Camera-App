@@ -1,14 +1,17 @@
 package com.remotestream.camera.service
 
+import android.Manifest
 import android.app.*
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import com.remotestream.camera.CameraApp
 import com.remotestream.camera.MainActivity
 import com.remotestream.camera.R
@@ -77,11 +80,13 @@ class CameraStreamingService : Service() {
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
-        // Do NOT downgrade an active stream to standby DATA_SYNC when user swipes from Recents
-        val state = (application as? CameraApp)?.sessionManager?.streamState?.value
-        if (state != StreamState.STREAMING) {
-            startStandbyForeground()
-        }
+        // Keep service, WebRTC, and signaling alive in memory when swiped from Recents
+    }
+
+    private fun hasCameraAndMicPermissions(): Boolean {
+        val cam = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+        val mic = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+        return cam && mic
     }
 
     private fun startStandbyForeground() {
@@ -103,6 +108,19 @@ class CameraStreamingService : Service() {
             .build()
 
         try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && hasCameraAndMicPermissions()) {
+                try {
+                    // Acquire camera|microphone FGS capability while Activity is in foreground so swiping Recents keeps it eligible
+                    startForeground(
+                        NOTIFICATION_ID,
+                        notification,
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+                    )
+                    return
+                } catch (_: SecurityException) {
+                    // Fallback to DATA_SYNC if started from background (e.g. boot)
+                }
+            }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 val fgsType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                     ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC

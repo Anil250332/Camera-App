@@ -171,16 +171,7 @@ fun MainScreen(viewModel: CameraViewModel) {
                     Text("Connected to: ${connectedViewer!!.viewerName}", fontSize = 13.sp, color = TextSecondary)
                     Spacer(modifier = Modifier.height(24.dp))
 
-                    Button(
-                        onClick = { viewModel.stopStreaming() },
-                        colors = ButtonDefaults.buttonColors(containerColor = AccentRed),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth().height(52.dp)
-                    ) {
-                        Icon(Icons.Default.StopCircle, contentDescription = null, modifier = Modifier.size(20.dp))
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text("Stop Streaming", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                    }
+                    
                 }
             }
         } else {
@@ -285,6 +276,28 @@ fun MainScreen(viewModel: CameraViewModel) {
                         }
                     }
                 }
+                Row(
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("OEM Autostart / Lock:", fontSize = 12.sp, color = Color.Gray)
+                    TextButton(
+                        onClick = {
+                            try {
+                                context.startActivity(
+                                    Intent(
+                                        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                        Uri.parse("package:${context.packageName}")
+                                    )
+                                )
+                            } catch (_: Exception) {}
+                        },
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Text("App Settings", fontSize = 11.sp, color = PrimaryBlue)
+                    }
+                }
                 if (trustedCount > 0) {
                     Spacer(modifier = Modifier.height(4.dp))
                     Row(
@@ -297,7 +310,7 @@ fun MainScreen(viewModel: CameraViewModel) {
                             onClick = { viewModel.revokeAllTrustedViewers() },
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
                         ) {
-                            Text("Revoke Trust", fontSize = 11.sp, color = AccentRed)
+                            Text("a", fontSize = 11.sp, color = AccentRed)
                         }
                     }
                 }

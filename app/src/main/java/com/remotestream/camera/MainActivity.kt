@@ -86,6 +86,15 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        val camOk = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+        val micOk = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+        if (camOk && micOk) {
+            viewModel.reconnectSignaling()
+        }
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         try {
