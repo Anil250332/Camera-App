@@ -85,7 +85,7 @@ class SocketSignalingClient(
 
             socket?.on(Socket.EVENT_CONNECT) {
                 val sid = socket?.id()
-                Log.d(TAG, "Socket connected: $sid")
+                Log.i(TAG, "[${System.currentTimeMillis()}] Socket CONNECTED id=$sid deviceId=$deviceId")
                 listener.onConnected()
 
                 // Register camera device into shared room & sync socket ID via POST route
@@ -134,9 +134,15 @@ class SocketSignalingClient(
                 listener.onRegistered(iceServersList)
             }
 
-            socket?.on(Socket.EVENT_DISCONNECT) {
-                Log.d(TAG, "Socket disconnected")
+            socket?.on(Socket.EVENT_DISCONNECT) { args ->
+                val reason = args.firstOrNull()?.toString() ?: "unknown"
+                Log.w(TAG, "[${System.currentTimeMillis()}] Socket DISCONNECTED reason=$reason")
                 listener.onDisconnected()
+            }
+
+            socket?.on(Socket.EVENT_CONNECT_ERROR) { args ->
+                val err = args.firstOrNull()?.toString() ?: "connect_error"
+                Log.w(TAG, "[${System.currentTimeMillis()}] Socket CONNECT_ERROR err=$err")
             }
 
             socket?.on("stream-requested") { args ->
@@ -263,7 +269,20 @@ class SocketSignalingClient(
         socket?.emit("end-stream", obj)
     }
 
+    fun isSocketConnected(): Boolean = socket?.connected() == true
+
+    fun sendHeartbeat() {
+        if (socket?.connected() == true) {
+            val obj = JSONObject().apply {
+                put("deviceId", deviceId)
+                put("ts", System.currentTimeMillis())
+            }
+            socket?.emit("camera-heartbeat", obj)
+        }
+    }
+
     fun disconnect() {
+        Log.i(TAG, "[${System.currentTimeMillis()}] Socket manual disconnect() called")
         socket?.disconnect()
         socket?.off()
         socket = null

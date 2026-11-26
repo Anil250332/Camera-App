@@ -8,6 +8,7 @@ import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -95,7 +96,13 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onStop() {
+        super.onStop()
+        Log.i("MainActivity", "[${System.currentTimeMillis()}] MainActivity.onStop() — socket remains in CameraStreamingService")
+    }
+
     override fun onDestroy() {
+        Log.i("MainActivity", "[${System.currentTimeMillis()}] MainActivity.onDestroy() — socket NOT disconnected")
         super.onDestroy()
         try {
             unregisterReceiver(stopBroadcastReceiver)

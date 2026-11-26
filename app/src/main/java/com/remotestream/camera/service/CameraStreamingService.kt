@@ -6,10 +6,14 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkRequest
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.remotestream.camera.CameraApp
@@ -17,17 +21,30 @@ import com.remotestream.camera.MainActivity
 import com.remotestream.camera.R
 import com.remotestream.camera.data.model.StreamState
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
 class CameraStreamingService : Service() {
 
     private var wakeLock: PowerManager.WakeLock? = null
     private var wifiLock: WifiManager.WifiLock? = null
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var heartbeatJob: Job? = null
+    private var connectivityManager: ConnectivityManager? = null
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
+        Log.i(TAG, "[${System.currentTimeMillis()}] CameraStreamingService.onCreate()")
         val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
         wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "CamGuard::SocketWakeLock").apply {
             setReferenceCounted(false)
@@ -44,9 +61,48 @@ class CameraStreamingService : Service() {
             setReferenceCounted(false)
             acquire()
         }
+
+        // Ensure signaling socket is initialized & connected directly from Service lifecycle
+        (application as? CameraApp)?.sessionManager?.connectIfNeeded()
+        registerNetworkWatchdog()
+        startHeartbeatLoop()
+    }
+
+    private fun registerNetworkWatchdog() {
+        try {
+            connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+            val cb = object : ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: Network) {
+                    Log.i(TAG, "[${System.currentTimeMillis()}] Network available — checking signaling socket")
+                    (application as? CameraApp)?.sessionManager?.connectIfNeeded()
+                }
+                override fun onLost(network: Network) {
+                    Log.w(TAG, "[${System.currentTimeMillis()}] Network lost")
+                }
+            }
+            networkCallback = cb
+            connectivityManager?.registerNetworkCallback(NetworkRequest.Builder().build(), cb)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to register network callback: ${e.message}")
+        }
+    }
+
+    private fun startHeartbeatLoop() {
+        heartbeatJob?.cancel()
+        heartbeatJob = serviceScope.launch {
+            while (isActive) {
+                delay(15_000L)
+                try {
+                    (application as? CameraApp)?.sessionManager?.sendHeartbeatOrReconnect()
+                } catch (e: Exception) {
+                    Log.w(TAG, "Heartbeat error: ${e.message}")
+                }
+            }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        Log.i(TAG, "[${System.currentTimeMillis()}] CameraStreamingService.onStartCommand(action=${intent?.action})")
         when {
             intent?.action == ACTION_STOP -> {
                 stopStreamingService()
@@ -80,7 +136,8 @@ class CameraStreamingService : Service() {
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
-        // Keep service, WebRTC, and signaling alive in memory when swiped from Recents
+        Log.i(TAG, "[${System.currentTimeMillis()}] CameraStreamingService.onTaskRemoved() — keeping socket & service alive")
+        (application as? CameraApp)?.sessionManager?.connectIfNeeded()
     }
 
     private fun hasCameraAndMicPermissions(): Boolean {
@@ -189,7 +246,13 @@ class CameraStreamingService : Service() {
     }
 
     override fun onDestroy() {
+        Log.w(TAG, "[${System.currentTimeMillis()}] CameraStreamingService.onDestroy()")
         super.onDestroy()
+        heartbeatJob?.cancel()
+        serviceScope.cancel()
+        try {
+            networkCallback?.let { connectivityManager?.unregisterNetworkCallback(it) }
+        } catch (_: Exception) {}
         pendingForegroundReady?.complete(false)
         pendingForegroundReady = null
         try {
@@ -215,6 +278,7 @@ class CameraStreamingService : Service() {
     }
 
     companion object {
+        private const val TAG = "CameraStreamingService"
         const val CHANNEL_ID = "camera_streaming_channel"
         const val NOTIFICATION_ID = 4001
         const val ACTION_STOP = "com.remotestream.camera.ACTION_STOP"

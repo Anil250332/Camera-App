@@ -108,8 +108,18 @@ class StreamSessionManager(private val context: Context) :
     }
 
     fun connectIfNeeded() {
-        if (signalingClient == null || !_isConnectedToSignaling.value) {
+        val alive = signalingClient?.isSocketConnected() == true
+        if (signalingClient == null || !_isConnectedToSignaling.value || !alive) {
+            Log.i(TAG, "[${System.currentTimeMillis()}] connectIfNeeded -> reconnecting signaling (alive=$alive)")
             reconnectSignaling()
+        }
+    }
+
+    fun sendHeartbeatOrReconnect() {
+        if (signalingClient?.isSocketConnected() == true) {
+            signalingClient?.sendHeartbeat()
+        } else {
+            connectIfNeeded()
         }
     }
 
