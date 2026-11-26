@@ -81,28 +81,53 @@ fun MainScreen(viewModel: CameraViewModel) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 16.dp),
+                .padding(horizontal = 20.dp, vertical = 18.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Box(
-                    modifier = Modifier.size(42.dp).clip(RoundedCornerShape(12.dp)).background(PrimaryBlue),
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(PrimaryBlue),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(Icons.Default.Videocam, contentDescription = null, tint = Color.White, modifier = Modifier.size(24.dp))
                 }
                 Column {
-                    Text("CamGuard", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    Text("CamGuard", fontSize = 19.sp, fontWeight = FontWeight.Bold, color = Color.White)
                     Text(viewModel.deviceName, fontSize = 11.sp, color = TextSecondary)
                 }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Box(
-                    modifier = Modifier.size(10.dp).clip(CircleShape)
-                        .background(if (isConnected) AccentGreen else Color(0xFFEF4444))
-                        .align(Alignment.CenterVertically)
-                )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Surface(
+                    shape = RoundedCornerShape(50),
+                    color = if (isConnected) AccentGreen.copy(alpha = 0.14f) else Color(0x26EF4444),
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        if (isConnected) AccentGreen.copy(alpha = 0.35f) else Color(0x55EF4444)
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(7.dp)
+                                .clip(CircleShape)
+                                .background(if (isConnected) AccentGreen else Color(0xFFEF4444))
+                        )
+                        Text(
+                            text = if (isConnected) "Online" else "Offline",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (isConnected) AccentGreen else Color(0xFFFCA5A5)
+                        )
+                    }
+                }
                 IconButton(onClick = { tempUrl = serverUrl; showServerDialog = true }) {
                     Icon(Icons.Default.Settings, contentDescription = "Server Settings", tint = TextSecondary)
                 }
@@ -234,9 +259,12 @@ fun MainScreen(viewModel: CameraViewModel) {
 
         // ─── Info Card ────────────────────────────────────────────────
         Card(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = CardDark.copy(alpha = 0.6f))
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(18.dp)),
+            shape = RoundedCornerShape(18.dp),
+            colors = CardDefaults.cardColors(containerColor = CardDark.copy(alpha = 0.78f))
         ) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
