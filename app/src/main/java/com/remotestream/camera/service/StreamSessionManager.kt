@@ -170,11 +170,14 @@ class StreamSessionManager(private val context: Context) :
                 if (!fgsReady) {
                     _streamState.value = StreamState.IDLE
                     _connectedViewer.value = null
+                    val reason = CameraStreamingService.lastForegroundError?.let {
+                        "Camera service unavailable ($it). Keep CamGuard open on screen to start stream."
+                    } ?: "Android blocked camera start while app was closed. Keep CamGuard open on screen to start stream."
                     signalingClient?.sendConsentDecision(
                         request.sessionId,
                         request.viewerDeviceId,
                         approved = false,
-                        message = "Android blocked camera start while app was closed. Keep CamGuard open on screen to start stream."
+                        message = reason
                     )
                     return@launch
                 }

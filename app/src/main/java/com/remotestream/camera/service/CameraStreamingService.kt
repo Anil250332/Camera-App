@@ -44,12 +44,12 @@ class CameraStreamingService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) {
-            ACTION_STOP -> {
+        when {
+            intent?.action == ACTION_STOP -> {
                 stopStreamingService()
                 return START_NOT_STICKY
             }
-            null, ACTION_STANDBY -> {
+            intent == null || intent.action == ACTION_STANDBY -> {
                 val state = (application as? CameraApp)?.sessionManager?.streamState?.value
                 if (state != StreamState.STREAMING) {
                     startStandbyForeground()
@@ -58,11 +58,18 @@ class CameraStreamingService : Service() {
                 (application as? CameraApp)?.sessionManager?.connectIfNeeded()
                 return START_STICKY
             }
-            else -> {
+            intent.action == ACTION_START_STREAM || intent.hasExtra(EXTRA_VIEWER_NAME) -> {
                 val viewerName = intent.getStringExtra(EXTRA_VIEWER_NAME) ?: "Authorized Viewer"
                 val ok = startForegroundStreaming(viewerName)
                 pendingForegroundReady?.complete(ok)
                 pendingForegroundReady = null
+                return START_STICKY
+            }
+            else -> {
+                val state = (application as? CameraApp)?.sessionManager?.streamState?.value
+                if (state != StreamState.STREAMING) {
+                    startStandbyForeground()
+                }
                 return START_STICKY
             }
         }
@@ -138,6 +145,7 @@ class CameraStreamingService : Service() {
             .build()
 
         return try {
+            lastForegroundError = null
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 val fgsTypes = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                     ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
@@ -149,8 +157,9 @@ class CameraStreamingService : Service() {
                 startForeground(NOTIFICATION_ID, notification)
             }
             true
-        } catch (_: Exception) {
+        } catch (e: Exception) {
             // Android 14+ blocks promoting a closed background app to CAMERA/MICROPHONE FGS; stay online in standby
+            lastForegroundError = e.message ?: e.javaClass.simpleName
             startStandbyForeground()
             false
         }
@@ -192,11 +201,16 @@ class CameraStreamingService : Service() {
         const val NOTIFICATION_ID = 4001
         const val ACTION_STOP = "com.remotestream.camera.ACTION_STOP"
         const val ACTION_STANDBY = "com.remotestream.camera.ACTION_STANDBY"
+        const val ACTION_START_STREAM = "com.remotestream.camera.ACTION_START_STREAM"
         const val BROADCAST_STOP_STREAM = "com.remotestream.camera.STOP_STREAM"
         const val EXTRA_VIEWER_NAME = "extra_viewer_name"
 
         @Volatile
         private var pendingForegroundReady: CompletableDeferred<Boolean>? = null
+
+        @Volatile
+        var lastForegroundError: String? = null
+            private set
 
         fun startStandby(context: Context) {
             try {
@@ -214,8 +228,10 @@ class CameraStreamingService : Service() {
         suspend fun startAndAwait(context: Context, viewerName: String): Boolean {
             val deferred = CompletableDeferred<Boolean>()
             pendingForegroundReady = deferred
+            lastForegroundError = null
             return try {
                 val intent = Intent(context, CameraStreamingService::class.java).apply {
+                    action = ACTION_START_STREAM
                     putExtra(EXTRA_VIEWER_NAME, viewerName)
                 }
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -223,8 +239,12 @@ class CameraStreamingService : Service() {
                 } else {
                     context.startService(intent)
                 }
-                withTimeoutOrNull(2500L) { deferred.await() } ?: false
-            } catch (_: Exception) {
+                withTimeoutOrNull(2500L) { deferred.await() } ?: run {
+                    if (lastForegroundError == null) lastForegroundError = "Foreground service timeout"
+                    false
+                }
+            } catch (e: Exception) {
+                lastForegroundError = e.message ?: e.javaClass.simpleName
                 pendingForegroundReady = null
                 false
             }
@@ -233,6 +253,7 @@ class CameraStreamingService : Service() {
         fun start(context: Context, viewerName: String) {
             try {
                 val intent = Intent(context, CameraStreamingService::class.java).apply {
+                    action = ACTION_START_STREAM
                     putExtra(EXTRA_VIEWER_NAME, viewerName)
                 }
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
