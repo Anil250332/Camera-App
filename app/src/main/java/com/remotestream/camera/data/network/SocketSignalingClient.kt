@@ -151,12 +151,13 @@ class SocketSignalingClient(
         }
     }
 
-    fun sendConsentDecision(sessionId: String, viewerDeviceId: String, approved: Boolean) {
+    fun sendConsentDecision(sessionId: String, viewerDeviceId: String, approved: Boolean, message: String? = null) {
         val obj = JSONObject().apply {
             put("sessionId", sessionId)
             put("viewerDeviceId", viewerDeviceId)
             put("cameraDeviceId", deviceId)
             put("approved", approved)
+            if (message != null) put("message", message)
         }
         socket?.emit("stream-decision", obj)
     }

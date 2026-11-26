@@ -85,6 +85,7 @@ class StreamSessionManager(private val context: Context) :
         }
     }
 
+    @Synchronized
     private fun initWebRtc() {
         if (webRtcManager == null) {
             webRtcManager = WebRtcManager(context, rootEglBase.eglBaseContext, this)
@@ -165,7 +166,19 @@ class StreamSessionManager(private val context: Context) :
             )
 
             try {
-                CameraStreamingService.start(context, request.viewerName)
+                val fgsReady = CameraStreamingService.startAndAwait(context, request.viewerName)
+                if (!fgsReady) {
+                    _streamState.value = StreamState.IDLE
+                    _connectedViewer.value = null
+                    signalingClient?.sendConsentDecision(
+                        request.sessionId,
+                        request.viewerDeviceId,
+                        approved = false,
+                        message = "Android blocked camera start while app was closed. Keep CamGuard open on screen to start stream."
+                    )
+                    return@launch
+                }
+                initWebRtc()
                 webRtcManager?.startLocalMediaCapture(isFrontFacing = false)
                 webRtcManager?.createPeerConnection(iceServers)
                 signalingClient?.sendConsentDecision(request.sessionId, request.viewerDeviceId, approved = true)

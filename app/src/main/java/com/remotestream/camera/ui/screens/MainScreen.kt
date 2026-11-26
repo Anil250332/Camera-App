@@ -1,5 +1,10 @@
 package com.remotestream.camera.ui.screens
 
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.os.PowerManager
+import android.provider.Settings
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -18,17 +23,36 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.remotestream.camera.data.model.StreamState
 import com.remotestream.camera.ui.theme.*
 import com.remotestream.camera.ui.viewmodel.CameraViewModel
 
 @Composable
 fun MainScreen(viewModel: CameraViewModel) {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val powerManager = remember { context.getSystemService(Context.POWER_SERVICE) as PowerManager }
+    var isIgnoringBattery by remember { mutableStateOf(powerManager.isIgnoringBatteryOptimizations(context.packageName)) }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                isIgnoringBattery = powerManager.isIgnoringBatteryOptimizations(context.packageName)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     val streamState by viewModel.streamState.collectAsState()
     val isConnected by viewModel.isConnectedToSignaling.collectAsState()
     val connectedViewer by viewModel.connectedViewer.collectAsState()
@@ -234,6 +258,32 @@ fun MainScreen(viewModel: CameraViewModel) {
                 Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
                     Text("Server:", fontSize = 12.sp, color = Color.Gray)
                     Text(serverUrl, fontSize = 11.sp, color = PrimaryBlue, fontFamily = FontFamily.Monospace)
+                }
+                if (!isIgnoringBattery) {
+                    Row(
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Background Power:", fontSize = 12.sp, color = Color(0xFFF59E0B), fontWeight = FontWeight.Medium)
+                        TextButton(
+                            onClick = {
+                                try {
+                                    context.startActivity(
+                                        Intent(
+                                            Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                                            Uri.parse("package:${context.packageName}")
+                                        )
+                                    )
+                                } catch (_: Exception) {
+                                    context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                                }
+                            },
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                        ) {
+                            Text("Allow Unrestricted", fontSize = 11.sp, color = PrimaryBlue)
+                        }
+                    }
                 }
                 if (trustedCount > 0) {
                     Spacer(modifier = Modifier.height(4.dp))
