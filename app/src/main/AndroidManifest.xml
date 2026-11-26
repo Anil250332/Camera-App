@@ -49,6 +49,7 @@
             android:name=".service.CameraStreamingService"
             android:enabled="true"
             android:exported="false"
+            android:stopWithTask="false"
             android:foregroundServiceType="camera|microphone|dataSync" />
 
         <receiver
