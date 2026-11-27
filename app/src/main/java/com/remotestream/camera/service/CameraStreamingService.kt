@@ -260,10 +260,12 @@ class CameraStreamingService : Service() {
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            // IMPORTANCE_LOW is the minimum safe value for foreground services on all Android/OEM variants.
+            // IMPORTANCE_MIN can cause startForeground() to fail or the service to be killed on some devices.
             val channel = NotificationChannel(
                 CHANNEL_ID,
                 getString(R.string.notification_channel_name),
-                NotificationManager.IMPORTANCE_MIN
+                NotificationManager.IMPORTANCE_LOW
             ).apply {
                 description = getString(R.string.notification_channel_desc)
                 setShowBadge(false)
