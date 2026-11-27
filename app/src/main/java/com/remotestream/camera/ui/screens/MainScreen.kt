@@ -62,14 +62,7 @@ fun MainScreen(viewModel: CameraViewModel) {
     var showServerDialog by remember { mutableStateOf(false) }
     var tempUrl by remember { mutableStateOf(serverUrl) }
 
-    pendingConsent?.let { request ->
-        ConsentDialog(
-            request = request,
-            onApproveOnce = { viewModel.approveStream(request, rememberForever = false) },
-            onApproveAlways = { viewModel.approveStream(request, rememberForever = true) },
-            onReject = { viewModel.rejectStream(request) }
-        )
-    }
+
 
     Column(
         modifier = Modifier
@@ -125,20 +118,6 @@ fun MainScreen(viewModel: CameraViewModel) {
                     "🔴 CAMERA & MICROPHONE ACTIVE — Streaming live footage",
                     fontSize = 12.sp, color = AccentRed, fontWeight = FontWeight.SemiBold
                 )
-            }
-        }
-
-        AnimatedVisibility(visible = streamState == StreamState.AWAITING_CONSENT, enter = fadeIn(), exit = fadeOut()) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color(0x33F59E0B))
-                    .padding(horizontal = 20.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Color(0xFFF59E0B))
-                Text("Viewer requesting stream — Approve or Deny", fontSize = 12.sp, color = Color(0xFFF59E0B))
             }
         }
 
@@ -217,10 +196,7 @@ fun MainScreen(viewModel: CameraViewModel) {
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = if (trustedCount > 0)
-                            "Trusted Dashboard account is authorized. Login on your Dashboard to view live camera & audio automatically."
-                        else
-                            "Open your Dashboard and login. Tap 'Always Allow' on the first prompt to connect automatically from then on.",
+                        text = "Open your Dashboard and login. Stream will connect automatically when you click Connect.",
                         fontSize = 13.sp,
                         color = TextSecondary,
                         textAlign = TextAlign.Center,
@@ -307,22 +283,7 @@ fun MainScreen(viewModel: CameraViewModel) {
                         Text("App Settings", fontSize = 11.sp, color = PrimaryBlue)
                     }
                 }
-                if (trustedCount > 0) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Row(
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Trusted Viewers: Active", fontSize = 12.sp, color = AccentGreen, fontWeight = FontWeight.Medium)
-                        TextButton(
-                            onClick = { viewModel.revokeAllTrustedViewers() },
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                        ) {
-                            Text("Revoke Trust", fontSize = 11.sp, color = AccentRed)
-                        }
-                    }
-                }
+
             }
         }
 
