@@ -159,10 +159,8 @@ class CameraStreamingService : Service() {
             .setContentText("Connected in standby — waiting for trusted viewer")
             .setSmallIcon(android.R.drawable.presence_online)
             .setOngoing(true)
-            .setPriority(NotificationCompat.PRIORITY_MIN)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
-            .setShowWhen(false)
-            .setVisibility(NotificationCompat.VISIBILITY_SECRET)
             .setContentIntent(openIntent)
             .build()
 
@@ -175,9 +173,11 @@ class CameraStreamingService : Service() {
                         notification,
                         ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
                     )
+                    Log.i(TAG, "[${System.currentTimeMillis()}] Standby foreground started (CAMERA|MICROPHONE)")
                     return
-                } catch (_: SecurityException) {
+                } catch (e: SecurityException) {
                     // Fallback to DATA_SYNC if started from background (e.g. boot)
+                    Log.w(TAG, "[${System.currentTimeMillis()}] Background camera|mic FGS not eligible yet (${e.message}), falling back to DATA_SYNC")
                 }
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -187,14 +187,25 @@ class CameraStreamingService : Service() {
                     ServiceInfo.FOREGROUND_SERVICE_TYPE_NONE
                 }
                 startForeground(NOTIFICATION_ID, notification, fgsType)
+                Log.i(TAG, "[${System.currentTimeMillis()}] Standby foreground started (DATA_SYNC/NONE)")
             } else {
                 startForeground(NOTIFICATION_ID, notification)
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            Log.e(TAG, "[${System.currentTimeMillis()}] startStandbyForeground failed: ${e.message}", e)
+        }
     }
 
     private fun startForegroundStreaming(viewerName: String): Boolean {
         createNotificationChannel()
+
+        val stopIntent = Intent(this, CameraStreamingService::class.java).apply {
+            action = ACTION_STOP
+        }
+        val stopPendingIntent = PendingIntent.getService(
+            this, 1001, stopIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
 
         val openActivityPendingIntent = PendingIntent.getActivity(
             this, 1002,
@@ -207,11 +218,10 @@ class CameraStreamingService : Service() {
             .setContentText("Streaming live video/audio to: $viewerName")
             .setSmallIcon(android.R.drawable.presence_video_online)
             .setOngoing(true)
-            .setPriority(NotificationCompat.PRIORITY_MIN)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
-            .setShowWhen(false)
-            .setVisibility(NotificationCompat.VISIBILITY_SECRET)
             .setContentIntent(openActivityPendingIntent)
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Stop Streaming", stopPendingIntent)
             .build()
 
         return try {
@@ -260,18 +270,12 @@ class CameraStreamingService : Service() {
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            // IMPORTANCE_LOW is the minimum safe value for foreground services on all Android/OEM variants.
-            // IMPORTANCE_MIN can cause startForeground() to fail or the service to be killed on some devices.
             val channel = NotificationChannel(
                 CHANNEL_ID,
                 getString(R.string.notification_channel_name),
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
                 description = getString(R.string.notification_channel_desc)
-                setShowBadge(false)
-                setSound(null, null)
-                enableVibration(false)
-                enableLights(false)
             }
             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.createNotificationChannel(channel)
@@ -305,7 +309,10 @@ class CameraStreamingService : Service() {
                 } else {
                     context.startService(intent)
                 }
-            } catch (_: Exception) {}
+                Log.i(TAG, "[${System.currentTimeMillis()}] startStandby() dispatched")
+            } catch (e: Exception) {
+                Log.e(TAG, "[${System.currentTimeMillis()}] startStandby() blocked by OS: ${e.message}", e)
+            }
         }
 
         suspend fun startAndAwait(context: Context, viewerName: String): Boolean {
